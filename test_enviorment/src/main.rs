@@ -1,41 +1,30 @@
-use rand::random_range;
-
-use nn_library::Perceptron;
-
-fn f(x: f64) -> f64 {
-    return 3.0 * x + 2.0;
-}
-
-fn get_expected_output(point: (f64, f64)) -> f64 {
-    if f(point.0) < point.1 {
-        return 1.0;
-    } else {
-        return -1.0;
-    }
-}
+use nn_library::NeuralNetwork;
 
 fn main() {
-    let mut points: Vec<(f64, f64)> = vec![];
+    let mut nn = NeuralNetwork::new(2, 2, 1);
 
-    for _ in 0..100 {
-        points.push((random_range(-100.0..100.0), random_range(-100.0..100.0)));
-    }
-
-    let mut p = Perceptron::new(3, 0.01);
+    let inputs = vec![
+        (vec![1.0, 0.0], vec![1.0]),
+        (vec![0.0, 1.0], vec![1.0]),
+        (vec![0.0, 0.0], vec![0.0]),
+        (vec![1.0, 1.0], vec![0.0]),
+    ];
 
     loop {
-        let mut error_sum = 0.0;
-
-        for point in &points {
-            let expected_output = get_expected_output(*point);
-
-            let output = p.guess(&vec![point.0, point.1, p.bias]);
-            error_sum += (expected_output - output).abs();
-
-            p.train(&vec![point.0, point.1, p.bias], &expected_output);
+        for (input, target) in inputs.iter() {
+            nn.train(input, target);
         }
 
-        println!("Error: {}", error_sum);
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut total = 0.0;
+        for (input, target) in inputs.iter() {
+            let output = nn.feed_forward(input);
+            total += (target[0] - output[0]).abs();
+        }
+
+        if total < 0.04 {
+            break;
+        }
+
+        println!("Error: {}", total);
     }
 }

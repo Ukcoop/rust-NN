@@ -1,51 +1,98 @@
-use rand::random_range;
+pub mod matrix;
+
+use matrix::Matrix;
 
 #[derive(Debug)]
-pub struct Perceptron {
-    pub weights: Vec<f64>,
-    pub bias: f64,
+pub struct NeuralNetwork {
+    pub input_nodes: u32,
+    pub hidden_nodes: u32,
+    pub output_nodes: u32,
     pub learning_rate: f64,
+    pub weights_ih: Matrix,
+    pub weights_ho: Matrix,
+    pub bias_h: Matrix,
+    pub bias_o: Matrix,
 }
 
-impl Perceptron {
-    pub fn new(weights_count: u32, learning_rate: f64) -> Perceptron {
-        let mut weights: Vec<f64> = vec![];
+fn sigmoid(x: f64) -> f64 {
+    return 1.0 / (1.0 + f64::exp(-x));
+}
 
-        for _ in 0..weights_count {
-            weights.push(random_range(-1.0..1.0));
-        }
+fn sigmoid_prime(y: f64) -> f64 {
+    return y * (1.0 - y);
+}
 
-        return Perceptron {
-            weights,
-            bias: 1.0,
-            learning_rate,
+impl NeuralNetwork {
+    pub fn new(input_nodes: u32, hidden_nodes: u32, output_nodes: u32) -> NeuralNetwork {
+        let mut nn = NeuralNetwork {
+            input_nodes,
+            hidden_nodes,
+            output_nodes,
+            learning_rate: 0.1,
+            weights_ih: Matrix::new(hidden_nodes, input_nodes),
+            weights_ho: Matrix::new(output_nodes, hidden_nodes),
+            bias_h: Matrix::new(hidden_nodes, 1),
+            bias_o: Matrix::new(output_nodes, 1),
         };
+
+        nn.weights_ih.randomize();
+        nn.weights_ho.randomize();
+        nn.bias_h.randomize();
+        nn.bias_o.randomize();
+
+        return nn;
     }
 
-    fn activation(n: f64) -> f64 {
-        if n >= 0.0 {
-            return 1.0;
-        } else {
-            return -1.0;
-        }
+    pub fn feed_forward(&self, input: &Vec<f64>) -> Vec<f64> {
+        let inputs = Matrix::from_vector(input);
+
+        let mut hidden = Matrix::multiply(&self.weights_ih, &inputs).unwrap();
+        hidden.add(&self.bias_h).unwrap();
+        hidden.map(sigmoid);
+
+        let mut outputs = Matrix::multiply(&self.weights_ho, &hidden).unwrap();
+        outputs.add(&self.bias_o).unwrap();
+        outputs.map(sigmoid);
+
+        return outputs.to_vector();
     }
 
-    pub fn guess(&self, inputs: &Vec<f64>) -> f64 {
-        let mut sum: f64 = 0.0;
-        for i in 0..self.weights.len() {
-            sum += self.weights[i] * inputs[i];
-        }
+    pub fn train(&mut self, input: &Vec<f64>, target: &Vec<f64>) {
+        let inputs = Matrix::from_vector(input);
 
-        let output = Perceptron::activation(sum);
-        return output;
-    }
+        let mut hidden = Matrix::multiply(&self.weights_ih, &inputs).unwrap();
+        hidden.add(&self.bias_h).unwrap();
+        hidden.map(sigmoid);
 
-    pub fn train(&mut self, inputs: &Vec<f64>, target: &f64) {
-        let guess = self.guess(inputs);
-        let error = target - guess;
+        let mut outputs = Matrix::multiply(&self.weights_ho, &hidden).unwrap();
+        outputs.add(&self.bias_o).unwrap();
+        outputs.map(sigmoid);
 
-        for i in 0..self.weights.len() {
-            self.weights[i] += error * inputs[i] * self.learning_rate;
-        }
+        let targets = Matrix::from_vector(target);
+
+        let output_errors = Matrix::subtract(&targets, &outputs).unwrap();
+
+        let mut gradients = Matrix::static_map(&outputs, sigmoid_prime);
+        gradients = Matrix::elementwise_multiply(&gradients, &output_errors).unwrap();
+        gradients.scale(self.learning_rate);
+
+        let hidden_t = Matrix::transpose(&hidden);
+        let who_deltas = Matrix::multiply(&gradients, &hidden_t).unwrap();
+
+        self.bias_o.add(&gradients).unwrap();
+        self.weights_ho.add(&who_deltas).unwrap();
+
+        let who_t = Matrix::transpose(&self.weights_ho);
+        let hidden_errors = Matrix::multiply(&who_t, &output_errors).unwrap();
+
+        let mut hidden_gradients = Matrix::static_map(&hidden, sigmoid_prime);
+        hidden_gradients = Matrix::elementwise_multiply(&hidden_gradients, &hidden_errors).unwrap();
+        hidden_gradients.scale(self.learning_rate);
+
+        let input_t = Matrix::transpose(&inputs);
+        let wih_deltas = Matrix::multiply(&hidden_gradients, &input_t).unwrap();
+
+        self.bias_h.add(&hidden_gradients).unwrap();
+        self.weights_ih.add(&wih_deltas).unwrap();
     }
 }
