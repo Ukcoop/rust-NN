@@ -1,62 +1,49 @@
+use nalgebra::DMatrix;
+use rayon::prelude::*;
 use std::error::Error;
 
 #[derive(Debug)]
 pub struct Matrix {
-    pub rows: u32,
-    pub cols: u32,
-    pub data: Vec<Vec<f64>>,
+    pub rows: usize,
+    pub cols: usize,
+    pub data: DMatrix<f64>,
 }
 
 impl Matrix {
-    pub fn new(rows: u32, cols: u32) -> Matrix {
-        let mut data = vec![];
-        for _ in 0..rows {
-            let mut row = vec![];
-            for _ in 0..cols {
-                row.push(0.0);
-            }
-            data.push(row);
-        }
-
+    pub fn new(rows: usize, cols: usize) -> Matrix {
+        let data = DMatrix::zeros(rows, cols);
         return Matrix { rows, cols, data };
     }
 
     pub fn from_vector(vector: &Vec<f64>) -> Matrix {
-        let mut matrix = Matrix::new(vector.len() as u32, 1);
-        for i in 0..vector.len() {
-            matrix.data[i][0] = vector[i];
-        }
-        return matrix;
+        let data = DMatrix::from_vec(vector.len(), 1, vector.clone());
+
+        return Matrix {
+            rows: vector.len(),
+            cols: 1,
+            data,
+        };
     }
 
     pub fn to_vector(&self) -> Vec<f64> {
-        let mut vector = vec![];
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                vector.push(self.data[i as usize][j as usize]);
-            }
-        }
-        return vector;
+        self.data.clone().as_slice().to_vec()
     }
 
     pub fn transpose(matrix: &Matrix) -> Matrix {
-        let mut result = Matrix::new(matrix.cols, matrix.rows);
+        let data = matrix.data.transpose();
 
-        for i in 0..matrix.rows {
-            for j in 0..matrix.cols {
-                result.data[j as usize][i as usize] = matrix.data[i as usize][j as usize];
-            }
-        }
-
-        return result;
+        return Matrix {
+            rows: matrix.cols,
+            cols: matrix.rows,
+            data,
+        };
     }
 
     pub fn randomize(&mut self) {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.data[i as usize][j as usize] = rand::random_range(-1.0..1.0);
-            }
-        }
+        self.data
+            .as_mut_slice()
+            .par_iter_mut()
+            .for_each(|x| *x = rand::random());
     }
 
     pub fn add(&mut self, other: &Matrix) -> Result<(), Box<dyn Error>> {
@@ -64,35 +51,52 @@ impl Matrix {
             return Err("Matrices must be the same size".into());
         }
 
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.data[i as usize][j as usize] += other.data[i as usize][j as usize];
-            }
-        }
+        let cols = self.cols;
+
+        self.data
+            .as_mut_slice()
+            .par_chunks_mut(cols)
+            .zip(other.data.as_slice().par_chunks(cols))
+            .for_each(|(mine, theirs)| {
+                for i in 0..cols {
+                    mine[i] += theirs[i];
+                }
+            });
 
         return Ok(());
     }
 
     pub fn add_number(&mut self, number: f64) {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.data[i as usize][j as usize] += number;
-            }
-        }
+        let cols = self.cols;
+
+        self.data
+            .as_mut_slice()
+            .par_chunks_mut(cols)
+            .for_each(|row| {
+                for x in row {
+                    *x += number;
+                }
+            });
     }
 
     pub fn subtract(a: &Matrix, b: &Matrix) -> Result<Matrix, Box<dyn Error>> {
         if a.rows != b.rows || a.cols != b.cols {
             return Err("Matrices must be the same size".into());
         }
-
         let mut result = Matrix::new(a.rows, a.cols);
-        for i in 0..a.rows {
-            for j in 0..a.cols {
-                result.data[i as usize][j as usize] =
-                    a.data[i as usize][j as usize] - b.data[i as usize][j as usize];
-            }
-        }
+        let cols = a.cols;
+
+        a.data
+            .as_slice()
+            .par_chunks(cols)
+            .zip(b.data.as_slice().par_chunks(cols))
+            .zip(result.data.as_mut_slice().par_chunks_mut(cols))
+            .for_each(|((ar, br), rr)| {
+                for i in 0..cols {
+                    rr[i] = ar[i] - br[i];
+                }
+            });
+
         return Ok(result);
     }
 
@@ -100,14 +104,20 @@ impl Matrix {
         if a.rows != b.rows || a.cols != b.cols {
             return Err("Matrices must be the same size".into());
         }
-
         let mut result = Matrix::new(a.rows, a.cols);
-        for i in 0..a.rows {
-            for j in 0..a.cols {
-                result.data[i as usize][j as usize] =
-                    a.data[i as usize][j as usize] * b.data[i as usize][j as usize];
-            }
-        }
+        let cols = a.cols;
+
+        a.data
+            .as_slice()
+            .par_chunks(cols)
+            .zip(b.data.as_slice().par_chunks(cols))
+            .zip(result.data.as_mut_slice().par_chunks_mut(cols))
+            .for_each(|((ar, br), rr)| {
+                for i in 0..cols {
+                    rr[i] = ar[i] * br[i];
+                }
+            });
+
         return Ok(result);
     }
 
@@ -116,41 +126,68 @@ impl Matrix {
             return Err("Matrices must be the same size".into());
         }
         let mut result = Matrix::new(a.rows, b.cols);
-        for i in 0..a.rows {
-            for j in 0..b.cols {
-                let mut sum = 0.0;
-                for k in 0..a.cols {
-                    sum += a.data[i as usize][k as usize] * b.data[k as usize][j as usize];
+        let cols = b.cols;
+        let inner = a.cols;
+
+        result
+            .data
+            .as_mut_slice()
+            .par_chunks_mut(cols)
+            .enumerate()
+            .for_each(|(i, row_out)| {
+                for j in 0..cols {
+                    let mut sum = 0.0;
+                    for k in 0..inner {
+                        sum += a.data[(i, k)] * b.data[(k, j)];
+                    }
+                    row_out[j] = sum;
                 }
-                result.data[i as usize][j as usize] = sum;
-            }
-        }
+            });
+
         return Ok(result);
     }
 
     pub fn scale(&mut self, scalar: f64) {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.data[i as usize][j as usize] *= scalar;
-            }
-        }
+        let cols = self.cols;
+
+        self.data
+            .as_mut_slice()
+            .par_chunks_mut(cols)
+            .for_each(|row| {
+                for x in row {
+                    *x *= scalar;
+                }
+            });
     }
 
     pub fn map(&mut self, func: fn(f64) -> f64) {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.data[i as usize][j as usize] = func(self.data[i as usize][j as usize]);
-            }
-        }
+        let cols = self.cols;
+
+        self.data
+            .as_mut_slice()
+            .par_chunks_mut(cols)
+            .for_each(|row| {
+                for x in row {
+                    *x = func(*x);
+                }
+            });
     }
 
     pub fn static_map(matrix: &Matrix, func: fn(f64) -> f64) -> Matrix {
         let mut result = Matrix::new(matrix.rows, matrix.cols);
-        for i in 0..matrix.rows {
-            for j in 0..matrix.cols {
-                result.data[i as usize][j as usize] = func(matrix.data[i as usize][j as usize]);
-            }
-        }
+        let cols = matrix.cols;
+
+        matrix
+            .data
+            .as_slice()
+            .par_chunks(cols)
+            .zip(result.data.as_mut_slice().par_chunks_mut(cols))
+            .for_each(|(src_row, dst_row)| {
+                for i in 0..cols {
+                    dst_row[i] = func(src_row[i]);
+                }
+            });
+
         return result;
     }
 }

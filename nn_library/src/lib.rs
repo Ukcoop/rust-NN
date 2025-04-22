@@ -23,16 +23,21 @@ fn sigmoid_prime(y: f64) -> f64 {
 }
 
 impl NeuralNetwork {
-    pub fn new(input_nodes: u32, hidden_nodes: u32, output_nodes: u32) -> NeuralNetwork {
+    pub fn new(
+        input_nodes: u32,
+        hidden_nodes: u32,
+        output_nodes: u32,
+        learning_rate: f64,
+    ) -> NeuralNetwork {
         let mut nn = NeuralNetwork {
             input_nodes,
             hidden_nodes,
             output_nodes,
-            learning_rate: 0.1,
-            weights_ih: Matrix::new(hidden_nodes, input_nodes),
-            weights_ho: Matrix::new(output_nodes, hidden_nodes),
-            bias_h: Matrix::new(hidden_nodes, 1),
-            bias_o: Matrix::new(output_nodes, 1),
+            learning_rate,
+            weights_ih: Matrix::new(hidden_nodes as usize, input_nodes as usize),
+            weights_ho: Matrix::new(output_nodes as usize, hidden_nodes as usize),
+            bias_h: Matrix::new(hidden_nodes as usize, 1),
+            bias_o: Matrix::new(output_nodes as usize, 1),
         };
 
         nn.weights_ih.randomize();
