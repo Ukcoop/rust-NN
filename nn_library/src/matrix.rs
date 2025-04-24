@@ -15,8 +15,8 @@ impl Matrix {
         return Matrix { rows, cols, data };
     }
 
-    pub fn from_vector(vector: &Vec<f64>) -> Matrix {
-        let data = DMatrix::from_vec(vector.len(), 1, vector.clone());
+    pub fn from_vector(vector: &[f64]) -> Matrix {
+        let data = DMatrix::from_vec(vector.len(), 1, vector.to_owned());
 
         return Matrix {
             rows: vector.len(),

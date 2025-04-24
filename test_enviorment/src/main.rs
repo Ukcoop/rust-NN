@@ -17,13 +17,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         for (input, target) in &inputs {
-            nn.train(input, target);
+            nn.train(input, target)?;
             cycle_count += 1;
         }
 
         let mut total_error = 0.0;
         for (input, target) in &inputs {
-            let output = nn.feed_forward(input);
+            let output = nn.feed_forward(input)?;
             total_error += (target[0] - output[0]).abs();
         }
 

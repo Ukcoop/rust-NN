@@ -7,3 +7,15 @@ edition = "2021"
 rand = "0.9.1"
 
 nn_library = { path = "../nn_library" }
+
+[lints.clippy]
+needless_return = "allow"
+needless_range_loop = "allow"
+
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+redundant_clone = "deny"
+implicit_clone = "deny"
+cloned_instead_of_copied = "deny"
