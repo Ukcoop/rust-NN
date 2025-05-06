@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 rand = "0.9.1"
 
-nn_library = { path = "../nn_library" }
+rust_nn = { path = "../rust_nn" }
 
 [lints.clippy]
 needless_return = "allow"

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["nn_library", "test_enviorment"]
+members = ["rust_nn", "test_enviorment"]
 
 [profile.dev]
 opt-level = 3

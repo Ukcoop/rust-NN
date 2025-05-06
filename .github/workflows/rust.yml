@@ -1,22 +1,36 @@
-name: Rust
+name: Rust + tch (libtorch)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v4
+
+      - name: Set up libtorch
+        run: |
+          wget https://download.pytorch.org/libtorch/cu118/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu118.zip
+          unzip libtorch-cxx11-abi-shared-with-deps-2.7.0+cu118.zip -d /tmp/libtorch
+          cp -r /tmp/libtorch/libtorch $HOME/.libtorch
+          rm libtorch-cxx11-abi-shared-with-deps-2.7.0+cu118.zip
+
+      - name: Export libtorch env vars
+        run: |
+          echo "LIBTORCH=$HOME/.libtorch" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$HOME/.libtorch/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$HOME/.libtorch/lib/pkgconfig:\$PKG_CONFIG_PATH" >> $GITHUB_ENV
+
+      - name: Build
+        run: cargo build --verbose
+        
+      - name: Run tests
+        run: cargo test --verbose

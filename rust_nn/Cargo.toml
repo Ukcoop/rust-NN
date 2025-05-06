@@ -1,12 +1,10 @@
 [package]
-name = "nn_library"
+name = "rust_nn"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-rand = "0.9.1"
-nalgebra = "0.33.2"
-rayon = "1.10.0"
+tch = "0.20"
 
 [lints.clippy]
 needless_return = "allow"
