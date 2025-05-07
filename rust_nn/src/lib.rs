@@ -1,8 +1,28 @@
-use std::error::Error;
+use std::{error::Error, fs::File};
 
-use tch::{nn, nn::ModuleT, nn::OptimizerConfig, no_grad, Device, Kind, Tensor};
+use base64::{Engine as _, engine::general_purpose};
 
+use serde::{Deserialize, Serialize};
+use serde_json::to_writer_pretty;
+
+use tch::{Device, Kind, Tensor, nn, nn::ModuleT, nn::OptimizerConfig, no_grad};
+
+#[derive(Serialize, Deserialize)]
+pub struct ModelJson {
+    pub input_size: i64,
+    pub hidden_layers: Vec<i64>,
+    pub output_size: i64,
+    pub lr: f64,
+    weights: String,
+}
+
+#[derive(Debug)]
 pub struct NeuralNetwork {
+    pub input_size: i64,
+    pub hidden_layers: Vec<i64>,
+    pub output_size: i64,
+    pub lr: f64,
+    vs: nn::VarStore,
     net: nn::SequentialT,
     opt: nn::Optimizer,
 }
@@ -45,7 +65,55 @@ impl NeuralNetwork {
 
         let opt = nn::Adam::default().build(&vs, lr)?;
 
-        return Ok(NeuralNetwork { net, opt });
+        return Ok(NeuralNetwork {
+            input_size,
+            hidden_layers: hidden_layers.to_vec(),
+            output_size,
+            lr,
+            vs,
+            net,
+            opt,
+        });
+    }
+
+    pub fn save(&self, path: &str) -> Result<(), Box<dyn Error>> {
+        let mut buffer = Vec::<u8>::new();
+        self.vs.save_to_stream(&mut buffer)?;
+        let b64 = general_purpose::STANDARD.encode(&buffer);
+
+        let model = ModelJson {
+            input_size: self.input_size,
+            hidden_layers: self.hidden_layers.clone(),
+            output_size: self.output_size,
+            lr: self.lr,
+            weights: b64,
+        };
+
+        let file = File::create(path)?;
+        to_writer_pretty(file, &model)?;
+
+        return Ok(());
+    }
+
+    pub fn load(path: &str) -> Result<Self, Box<dyn Error>> {
+        let file = File::open(path)?;
+        let model: ModelJson = serde_json::from_reader(file)?;
+
+        let b64 = model.weights.as_str();
+        let raw = general_purpose::STANDARD.decode(b64)?;
+
+        let mut loaded_model = NeuralNetwork::new(
+            model.input_size,
+            &model.hidden_layers,
+            model.output_size,
+            model.lr,
+        )?;
+
+        loaded_model
+            .vs
+            .load_from_stream(std::io::Cursor::new(raw))?;
+
+        return Ok(loaded_model);
     }
 
     pub fn train(&mut self, inputs: &[f32], targets: &[f32]) -> f32 {
@@ -81,8 +149,20 @@ mod tests {
     use std::time::Instant;
 
     #[test]
+    fn save_and_load() {
+        let nn = NeuralNetwork::new(2, &[4, 4], 1, 1e-2).unwrap();
+        nn.save("/tmp/nn.json").unwrap();
+        let nn2 = NeuralNetwork::load("/tmp/nn.json").unwrap();
+
+        assert_eq!(nn.predict(&[0.0, 0.0]), nn2.predict(&[0.0, 0.0]));
+        assert_eq!(nn.predict(&[0.0, 1.0]), nn2.predict(&[0.0, 1.0]));
+        assert_eq!(nn.predict(&[1.0, 0.0]), nn2.predict(&[1.0, 0.0]));
+        assert_eq!(nn.predict(&[1.0, 1.0]), nn2.predict(&[1.0, 1.0]));
+    }
+
+    #[test]
     fn xor_problem() {
-        let mut nn = NeuralNetwork::new(2, &[4, 4], 1, 1e-2).unwrap();
+        let mut nn = NeuralNetwork::new(2, &[8, 8], 1, 1e-2).unwrap();
 
         let inputs = vec![
             (vec![1.0, 0.0], vec![1.0]),
